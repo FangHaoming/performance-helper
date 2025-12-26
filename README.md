@@ -4,7 +4,9 @@
 
 ## 功能特性
 
-- ✅ **性能指标监控**：FCP、LCP、FID、CLS、TTFB 等 Web Vitals 指标
+- ✅ **性能指标监控**：FCP、LCP、FID、CLS、TBT、TTFB 等 Web Vitals 指标
+- ✅ **长任务监控**：监控阻塞主线程的长任务，记录详细的归因信息（脚本URL、DOM元素等）
+- ✅ **LCP 元素定位**：自动记录 LCP 元素路径，支持可视化高亮显示
 - ✅ **资源加载监控**：监控所有资源的加载时间和大小
 - ✅ **错误监控**：自动捕获 JavaScript 错误、Promise 错误和资源加载错误
 - ✅ **数据上报**：支持批量上报和立即上报，使用 sendBeacon 确保数据不丢失
@@ -50,6 +52,43 @@ const sdk = new PerformanceHelper({
 });
 
 sdk.init();
+```
+
+### 使用示例
+
+#### 获取性能指标并高亮 LCP 元素
+
+```typescript
+// 获取性能指标
+const metrics = sdk.getPerformanceMetrics();
+console.log('LCP:', metrics.lcp);
+console.log('TBT:', metrics.tbt);
+console.log('LCP Element:', metrics.lcpElement);
+
+// 高亮显示 LCP 元素（用于调试）
+if (metrics.lcpElement) {
+  sdk.highlightLCPElement({
+    borderColor: '#ff0000',
+    borderWidth: '3px',
+    backgroundColor: 'rgba(255, 255, 0, 0.2)',
+    scrollIntoView: true,
+  });
+}
+
+// 查看长任务信息
+if (metrics.longTasks && metrics.longTasks.length > 0) {
+  metrics.longTasks.forEach((task) => {
+    console.log(`长任务: ${task.duration}ms`);
+    task.attribution.forEach((attr) => {
+      if (attr.scriptURL) {
+        console.log(`  脚本: ${attr.scriptURL}`);
+      }
+      if (attr.elementPath) {
+        console.log(`  元素: ${attr.elementPath}`);
+      }
+    });
+  });
+}
 ```
 
 ## API
@@ -117,6 +156,29 @@ try {
 sdk.reportCustom('custom', { event: 'click', button: 'submit' });
 ```
 
+#### `highlightLCPElement(options?)`
+高亮显示 LCP 元素（用于调试），会在元素周围添加高亮边框并自动滚动到元素位置。
+
+```typescript
+// 使用默认样式高亮
+sdk.highlightLCPElement();
+
+// 自定义样式
+sdk.highlightLCPElement({
+  borderColor: '#00ff00',
+  borderWidth: '5px',
+  backgroundColor: 'rgba(0, 255, 0, 0.3)',
+  scrollIntoView: true,
+});
+```
+
+#### `removeLCPHighlight()`
+移除 LCP 元素的高亮效果。
+
+```typescript
+sdk.removeLCPHighlight();
+```
+
 #### `destroy()`
 销毁 SDK，清理资源并上报剩余数据。
 
@@ -138,8 +200,21 @@ sdk.destroy();
 ### CLS (Cumulative Layout Shift)
 累积布局偏移，页面布局稳定性的指标。
 
+### TBT (Total Blocking Time)
+总阻塞时间，所有长任务（>50ms）的阻塞时间总和。用于衡量页面交互响应性。
+
 ### TTFB (Time to First Byte)
 首字节时间，从请求到接收到第一个字节的时间。
+
+### LCP Element
+LCP 元素路径，记录导致最大内容绘制的 DOM 元素，使用 CSS 选择器路径格式。
+
+### 长任务 (Long Tasks)
+记录所有超过 50ms 的长任务，包含详细的归因信息：
+- 任务类型（script、layout、style、paint、composite 等）
+- 脚本 URL（如果是脚本执行导致的长任务）
+- DOM 元素信息（如果是 DOM 操作导致的长任务）
+- 容器信息（如果是 iframe 等容器中的任务）
 
 ### 其他指标
 - `dns`: DNS 查询时间
@@ -159,15 +234,42 @@ sdk.destroy();
   "data": {
     "fcp": 1200,
     "lcp": 2500,
+    "lcpElement": "body > div#app > img.hero-image",
     "fid": 50,
     "cls": 0.1,
+    "tbt": 150,
     "ttfb": 300,
     "dns": 20,
     "tcp": 100,
     "request": 200,
     "parse": 500,
     "domContentLoaded": 1500,
-    "load": 3006
+    "load": 3006,
+    "longTasks": [
+      {
+        "startTime": 1000,
+        "duration": 120,
+        "attribution": [
+          {
+            "taskType": "script",
+            "scriptURL": "https://example.com/heavy-script.js",
+            "name": "long-task"
+          }
+        ]
+      },
+      {
+        "startTime": 2000,
+        "duration": 80,
+        "attribution": [
+          {
+            "taskType": "layout",
+            "elementPath": "body > div#app > div.container",
+            "elementTag": "div",
+            "elementClass": "container"
+          }
+        ]
+      }
+    ]
   },
   "timestamp": 1234567890,
   "url": "https://example.com",
