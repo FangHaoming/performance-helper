@@ -1,0 +1,30 @@
+{
+  "name": "performance-helper",
+  "version": "1.0.0",
+  "description": "前端性能监控 SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "serve": "node examples/server.js",
+    "start": "npm run build && npm run serve"
+  },
+  "keywords": [
+    "performance",
+    "monitoring",
+    "sdk",
+    "frontend"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  },
+  "files": [
+    "dist"
+  ]
+}
+
