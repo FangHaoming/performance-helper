@@ -31,7 +31,54 @@ export class PerformanceCollector {
    */
   collect(): PerformanceMetrics {
     this.collectNavigationTiming();
+    // 重新获取最终的 LCP 值，确保与 Lighthouse 一致
+    // 因为 LCP 可能在页面加载过程中多次更新，需要在最终时刻获取
+    this.collectFinalLCP();
     return { ...this.metrics };
+  }
+
+  /**
+   * 采集最终的 LCP 值
+   * 从 Performance API 中获取最新的 LCP entry，确保获取的是最终值
+   * 这与 Lighthouse 的计算方式一致
+   */
+  private collectFinalLCP(): void {
+    if (!window.performance || !window.performance.getEntriesByType) {
+      return;
+    }
+
+    try {
+      // 获取所有 LCP entries，最后一个就是最终的 LCP
+      const lcpEntries = window.performance.getEntriesByType('largest-contentful-paint') as any[];
+      if (lcpEntries.length > 0) {
+        const lastEntry = lcpEntries[lcpEntries.length - 1];
+        
+        // 使用与 observeLCP 相同的计算逻辑
+        let lcpValue: number | undefined;
+        
+        if (lastEntry.renderTime !== undefined && lastEntry.renderTime !== null && lastEntry.renderTime > 0) {
+          lcpValue = lastEntry.renderTime;
+        } else if (lastEntry.loadTime !== undefined && lastEntry.loadTime !== null && lastEntry.loadTime > 0) {
+          lcpValue = lastEntry.loadTime;
+        } else {
+          lcpValue = lastEntry.startTime;
+        }
+        
+        if (lcpValue !== undefined && lcpValue !== null && lcpValue > 0) {
+          this.metrics.lcp = Math.round(lcpValue);
+          
+          // 更新 LCP 元素路径
+          if (lastEntry.element && lastEntry.element instanceof Element) {
+            const elementPath = getElementPath(lastEntry.element);
+            if (elementPath) {
+              this.metrics.lcpElement = elementPath;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // 浏览器不支持或出错，使用 observer 中已收集的值
+    }
   }
 
   /**
@@ -168,6 +215,15 @@ export class PerformanceCollector {
 
   /**
    * 观察 LCP
+   * 
+   * 根据 Web Vitals 标准和 Lighthouse 的实现：
+   * - renderTime 和 loadTime 是相对于 performance.timeOrigin 的
+   * - timeOrigin 通常等于 navigation start
+   * - 所以 renderTime/loadTime/startTime 已经是相对于 navigation start 的
+   * 
+   * Lighthouse 的计算方式：
+   * - 对于图片等资源：优先使用 renderTime，如果没有则使用 loadTime
+   * - 对于文本节点：使用 startTime
    */
   private observeLCP(): void {
     if (!('PerformanceObserver' in window)) {
@@ -179,13 +235,30 @@ export class PerformanceCollector {
         const entries = list.getEntries();
         const lastEntry = entries[entries.length - 1] as any;
         
-        // LCP 值计算优先级：
+        // LCP 值计算优先级（根据 Web Vitals 标准和 Lighthouse 实现）：
         // 1. renderTime - 元素实际渲染到屏幕的时间（最准确，适用于图片等资源）
-        // 2. startTime - PerformanceEntry 标准属性（总是存在，适用于文本节点等）
-        // 3. loadTime - 资源加载完成时间（作为最后备选）
-        const lcpValue = lastEntry.renderTime ?? lastEntry.startTime ?? lastEntry.loadTime;
+        // 2. loadTime - 资源加载完成时间（适用于图片等资源，如果 renderTime 不可用）
+        // 3. startTime - PerformanceEntry 标准属性（总是存在，适用于文本节点等）
+        // 
+        // 注意：这些时间值都是相对于 timeOrigin 的，而 timeOrigin 通常等于 navigation start
+        // 所以直接使用这些值即可，与 Lighthouse 的计算方式一致
+        let lcpValue: number | undefined;
         
-        if (lcpValue) {
+        if (lastEntry.renderTime !== undefined && lastEntry.renderTime !== null && lastEntry.renderTime > 0) {
+          // 优先使用 renderTime（图片等资源的实际渲染时间）
+          // 这是 Lighthouse 推荐的方式，最准确
+          lcpValue = lastEntry.renderTime;
+        } else if (lastEntry.loadTime !== undefined && lastEntry.loadTime !== null && lastEntry.loadTime > 0) {
+          // 如果没有 renderTime，使用 loadTime（资源加载完成时间）
+          lcpValue = lastEntry.loadTime;
+        } else {
+          // 最后使用 startTime（文本节点等）
+          lcpValue = lastEntry.startTime;
+        }
+        
+        if (lcpValue !== undefined && lcpValue !== null && lcpValue > 0) {
+          // renderTime/loadTime/startTime 已经是相对于 timeOrigin 的
+          // 而 timeOrigin 通常等于 navigation start，所以直接使用即可
           this.metrics.lcp = Math.round(lcpValue);
           
           // 记录LCP元素的路径
