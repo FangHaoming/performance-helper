@@ -197,14 +197,14 @@ export function highlightElement(
   } = options || {};
 
   // 保存原始样式
-  const originalOutline = element.style.outline;
+  const originalBorder = element.style.border;
   const originalBoxShadow = element.style.boxShadow;
   const originalBackgroundColor = element.style.backgroundColor;
   const originalZIndex = element.style.zIndex;
   const originalPosition = element.style.position;
 
   // 应用高亮样式
-  element.style.outline = `${borderWidth} solid ${borderColor}`;
+  element.style.border = `${borderWidth} solid ${borderColor}`;
   element.style.boxShadow = `0 0 0 ${borderWidth} ${borderColor}`;
   element.style.backgroundColor = backgroundColor;
   element.style.zIndex = '9999';
@@ -219,7 +219,7 @@ export function highlightElement(
 
   // 返回移除高亮的函数
   return () => {
-    element.style.outline = originalOutline;
+    element.style.border = originalBorder;
     element.style.boxShadow = originalBoxShadow;
     element.style.backgroundColor = originalBackgroundColor;
     element.style.zIndex = originalZIndex;
