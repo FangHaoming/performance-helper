@@ -4,7 +4,7 @@ import { ReportData, PerformanceHelperOptions } from '../types';
  * 数据上报器
  */
 export class Reporter {
-  private reportUrl: string;
+  private reportUrl?: string;
   private appId?: string;
   private userId?: string;
   private immediate: boolean;
@@ -64,6 +64,12 @@ export class Reporter {
    * 发送数据
    */
   private send(data: ReportData[]): void {
+    // 如果没有 reportUrl，将数据打印到控制台
+    if (!this.reportUrl) {
+      console.log('📊 Performance Helper Report:', data);
+      return;
+    }
+
     // 使用 sendBeacon 优先，fallback 到 fetch
     if (navigator.sendBeacon) {
       const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
@@ -102,9 +108,14 @@ export class Reporter {
   private setupBeforeUnload(): void {
     window.addEventListener('beforeunload', () => {
       if (this.queue.length > 0) {
-        // 使用 sendBeacon 确保数据能发送
-        const blob = new Blob([JSON.stringify(this.queue)], { type: 'application/json' });
-        navigator.sendBeacon(this.reportUrl, blob);
+        if (this.reportUrl) {
+          // 使用 sendBeacon 确保数据能发送
+          const blob = new Blob([JSON.stringify(this.queue)], { type: 'application/json' });
+          navigator.sendBeacon(this.reportUrl, blob);
+        } else {
+          // 如果没有 reportUrl，打印到控制台
+          console.log('📊 Performance Helper Report (beforeunload):', this.queue);
+        }
       }
     });
   }

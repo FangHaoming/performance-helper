@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>渲染性能排查示例</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section {
+      margin-bottom: 40px;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .section h2 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    .button {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .button:hover {
+      background: #0056b3;
+    }
+
+    .button.danger {
+      background: #dc3545;
+    }
+
+    .button.danger:hover {
+      background: #c82333;
+    }
+
+    .button.success {
+      background: #28a745;
+    }
+
+    .button.success:hover {
+      background: #218838;
+    }
+
+    .container {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      margin: 20px 0;
+      min-height: 100px;
+      background: #f9f9f9;
+    }
+
+    .box {
+      display: inline-block;
+      width: 50px;
+      height: 50px;
+      background: #007bff;
+      margin: 5px;
+      transition: transform 0.3s;
+    }
+
+    .box:hover {
+      transform: scale(1.2);
+    }
+
+    .animated-box {
+      width: 100px;
+      height: 100px;
+      background: #28a745;
+      margin: 20px 0;
+      /* 没有GPU加速 */
+      transition: left 0.3s;
+      position: relative;
+      left: 0;
+    }
+
+    .animated-box.gpu {
+      /* 使用GPU加速 */
+      transition: transform 0.3s;
+      transform: translateX(0);
+    }
+
+    .stats {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 10px 0;
+      font-family: monospace;
+    }
+
+    .stats-item {
+      margin: 5px 0;
+    }
+
+    .stats-item strong {
+      color: #007bff;
+    }
+
+    .warning {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+
+    .info {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>渲染性能排查示例</h1>
+
+  <div class="section">
+    <h2>1. 性能统计</h2>
+    <div id="stats" class="stats">
+      <div class="stats-item">点击"更新统计"按钮查看性能数据</div>
+    </div>
+    <button class="button" onclick="updateStats()">更新统计</button>
+    <button class="button" onclick="clearStats()">清空数据</button>
+  </div>
+
+  <div class="section">
+    <h2>2. 重排测试</h2>
+    <div class="info">
+      <strong>说明：</strong>下面的操作会触发重排，点击按钮后查看统计数据的变化。
+    </div>
+    <div id="reflow-container" class="container">
+      <div class="box"></div>
+      <div class="box"></div>
+      <div class="box"></div>
+    </div>
+    <button class="button danger" onclick="triggerReflow()">触发重排（不好）</button>
+    <button class="button success" onclick="triggerOptimizedReflow()">优化后的操作（好）</button>
+    <button class="button" onclick="highlightFrequentReflows()">高亮频繁重排元素</button>
+  </div>
+
+  <div class="section">
+    <h2>3. GPU加速测试</h2>
+    <div class="info">
+      <strong>说明：</strong>下面的动画元素应该使用GPU加速，但第一个没有使用。
+    </div>
+    <div id="animation-container" class="container">
+      <div id="animated-box-1" class="animated-box">未使用GPU加速</div>
+      <div id="animated-box-2" class="animated-box gpu">使用GPU加速</div>
+    </div>
+    <button class="button" onclick="animateBoxes()">运行动画</button>
+    <button class="button" onclick="checkGPUAcceleration()">检查GPU加速</button>
+    <button class="button" onclick="highlightNeedingGPU()">高亮需要GPU加速的元素</button>
+  </div>
+
+  <div class="section">
+    <h2>4. 控制台命令</h2>
+    <div class="warning">
+      <strong>提示：</strong>打开浏览器控制台（F12），可以使用以下命令：
+      <ul>
+        <li><code>window.helper.getRenderMetrics()</code> - 获取渲染性能指标</li>
+        <li><code>window.helper.getFrequentReflowElements(3)</code> - 获取频繁重排的元素</li>
+        <li><code>window.helper.getElementsNeedingGPUAcceleration()</code> - 获取需要GPU加速的元素</li>
+        <li><code>window.helper.highlightFrequentReflowElements(3)</code> - 高亮频繁重排元素</li>
+        <li><code>window.helper.highlightElementsNeedingGPUAcceleration()</code> - 高亮需要GPU加速的元素</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 引入编译后的 performance-helper SDK -->
+  <!-- 注意：需要先运行 npm run build 编译 SDK -->
+  <script type="module">
+    import PerformanceHelper from '../dist/index.js';
+    
+    // 初始化真实的 PerformanceHelper
+    const helper = new PerformanceHelper({
+      reportUrl: 'http://localhost:3006/api/report', // 使用本地服务器的API端点
+      monitorPerformance: true,
+      monitorResources: false,
+      monitorErrors: false,
+    });
+    
+    helper.init();
+    window.helper = helper;
+
+    // 将函数挂载到 window 上，确保 onclick 可以访问
+    window.updateStats = function() {
+      const metrics = window.helper.getRenderMetrics();
+      const statsDiv = document.getElementById('stats');
+      statsDiv.innerHTML = `
+        <div class="stats-item"><strong>重排次数:</strong> ${metrics.reflowCount}</div>
+        <div class="stats-item"><strong>重绘次数:</strong> ${metrics.repaintCount}</div>
+        <div class="stats-item"><strong>总重排时间:</strong> ${metrics.totalReflowTime}ms</div>
+        <div class="stats-item"><strong>总重绘时间:</strong> ${metrics.totalRepaintTime}ms</div>
+        <div class="stats-item"><strong>GPU加速元素:</strong> ${metrics.gpuAcceleratedCount}</div>
+      `;
+    };
+
+    window.clearStats = function() {
+      window.helper.clearRenderMetrics();
+      window.updateStats();
+    };
+
+    window.triggerReflow = function() {
+      const container = document.getElementById('reflow-container');
+      window.helper.markReflow(container, 'bad_practice');
+      
+      // 不好的做法：逐个添加元素，每次都会触发重排
+      for (let i = 0; i < 10; i++) {
+        const box = document.createElement('div');
+        box.className = 'box';
+        box.style.width = `${50 + i * 5}px`; // 每次修改都会触发重排
+        container.appendChild(box);
+      }
+      
+      window.updateStats();
+    };
+
+    window.triggerOptimizedReflow = function() {
+      const container = document.getElementById('reflow-container');
+      window.helper.markReflow(container, 'optimized');
+      
+      // 好的做法：使用 DocumentFragment 批量添加
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < 10; i++) {
+        const box = document.createElement('div');
+        box.className = 'box';
+        box.style.width = `${50 + i * 5}px`;
+        fragment.appendChild(box);
+      }
+      container.appendChild(fragment);
+      
+      window.updateStats();
+    };
+
+    window.highlightFrequentReflows = function() {
+      const count = window.helper.highlightFrequentReflowElements(2);
+      alert(`已高亮 ${count} 个频繁重排的元素`);
+    };
+
+    window.animateBoxes = function() {
+      const box1 = document.getElementById('animated-box-1');
+      const box2 = document.getElementById('animated-box-2');
+      
+      // 未使用GPU加速的动画（使用 left）
+      if (box1) {
+        box1.style.left = box1.style.left === '200px' ? '0px' : '200px';
+      }
+      
+      // 使用GPU加速的动画（使用 transform）
+      if (box2) {
+        const current = box2.style.transform === 'translateX(200px)' 
+          ? 'translateX(0px)' 
+          : 'translateX(200px)';
+        box2.style.transform = current;
+      }
+    };
+
+    window.checkGPUAcceleration = function() {
+      const elements = window.helper.getElementsNeedingGPUAcceleration();
+      if (elements.length > 0) {
+        alert(`发现 ${elements.length} 个需要GPU加速的元素:\n${elements.map(e => e.path).join('\n')}`);
+      } else {
+        alert('所有元素都已正确使用GPU加速！');
+      }
+    };
+
+    window.highlightNeedingGPU = function() {
+      const count = window.helper.highlightElementsNeedingGPUAcceleration();
+      alert(`已高亮 ${count} 个需要GPU加速的元素`);
+    };
+
+    // 初始化 - 等待 DOM 加载完成
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        window.updateStats();
+      });
+    } else {
+      window.updateStats();
+    }
+  </script>
+</body>
+</html>
+

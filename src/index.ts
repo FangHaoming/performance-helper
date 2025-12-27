@@ -5,11 +5,16 @@ import {
   ErrorInfo, 
   ReportData,
   LongTaskInfo,
-  LongTaskAttribution
+  LongTaskAttribution,
+  RenderMetrics,
+  ReflowInfo,
+  RepaintInfo,
+  GPUAccelerationInfo
 } from './types';
 import { PerformanceCollector } from './core/performance';
 import { ResourceMonitor } from './core/resource';
 import { ErrorMonitor } from './core/error';
+import { RenderMonitor } from './core/render';
 import { Reporter } from './core/reporter';
 import { querySelectorByPath, highlightElement, removeElementHighlight, HighlightOptions } from './utils/index';
 
@@ -22,13 +27,10 @@ export class PerformanceHelper {
   private performanceCollector: PerformanceCollector;
   private resourceMonitor: ResourceMonitor;
   private errorMonitor: ErrorMonitor;
+  private renderMonitor: RenderMonitor;
   private initialized: boolean = false;
 
   constructor(options: PerformanceHelperOptions) {
-    if (!options.reportUrl) {
-      throw new Error('reportUrl is required');
-    }
-
     this.options = {
       immediate: false,
       monitorResources: true,
@@ -42,6 +44,7 @@ export class PerformanceHelper {
     this.performanceCollector = new PerformanceCollector();
     this.resourceMonitor = new ResourceMonitor();
     this.errorMonitor = new ErrorMonitor();
+    this.renderMonitor = new RenderMonitor();
     
     // 立即初始化性能观察器（需要在页面加载前设置）
     if (this.options.monitorPerformance) {
@@ -71,6 +74,9 @@ export class PerformanceHelper {
     if (this.options.monitorErrors) {
       this.errorMonitor.start();
     }
+
+    // 启动渲染性能监控
+    this.renderMonitor.start();
 
     if (this.options.monitorPerformance) {
       // 等待页面加载完成后采集性能指标
@@ -222,11 +228,126 @@ export class PerformanceHelper {
   }
 
   /**
+   * 获取渲染性能指标
+   */
+  getRenderMetrics(): RenderMetrics {
+    return this.renderMonitor.getMetrics();
+  }
+
+  /**
+   * 获取频繁重排的元素
+   * @param threshold 阈值，默认3次
+   */
+  getFrequentReflowElements(threshold?: number): Array<{ element: Element; path: string; count: number }> {
+    return this.renderMonitor.getFrequentReflowElements(threshold);
+  }
+
+  /**
+   * 获取需要GPU加速但未使用的元素
+   */
+  getElementsNeedingGPUAcceleration(): Array<{ element: HTMLElement; path: string; reason: string }> {
+    return this.renderMonitor.getElementsNeedingGPUAcceleration();
+  }
+
+  /**
+   * 手动标记重排
+   * @param element 相关元素
+   * @param reason 原因
+   */
+  markReflow(element?: Element, reason?: string): void {
+    this.renderMonitor.markReflow(element, reason);
+  }
+
+  /**
+   * 手动标记重绘
+   * @param element 相关元素
+   * @param reason 原因
+   */
+  markRepaint(element?: Element, reason?: string): void {
+    this.renderMonitor.markRepaint(element, reason);
+  }
+
+  /**
+   * 高亮频繁重排的元素（用于调试）
+   * @param threshold 阈值，默认3次
+   * @param options 高亮选项
+   */
+  highlightFrequentReflowElements(threshold?: number, options?: HighlightOptions): number {
+    const frequentElements = this.getFrequentReflowElements(threshold);
+    let highlightedCount = 0;
+
+    frequentElements.forEach(({ element }) => {
+      if (element instanceof HTMLElement) {
+        const removeHighlight = highlightElement(element, {
+          borderColor: '#ff0000',
+          backgroundColor: 'rgba(255, 0, 0, 0.1)',
+          ...options,
+        });
+        if (removeHighlight) {
+          highlightedCount++;
+        }
+      }
+    });
+
+    console.log(`Highlighted ${highlightedCount} frequent reflow elements`);
+    return highlightedCount;
+  }
+
+  /**
+   * 高亮需要GPU加速的元素（用于调试）
+   * @param options 高亮选项
+   */
+  highlightElementsNeedingGPUAcceleration(options?: HighlightOptions): number {
+    const elements = this.getElementsNeedingGPUAcceleration();
+    let highlightedCount = 0;
+
+    elements.forEach(({ element }) => {
+      const removeHighlight = highlightElement(element, {
+        borderColor: '#ffa500',
+        backgroundColor: 'rgba(255, 165, 0, 0.1)',
+        ...options,
+      });
+      if (removeHighlight) {
+        highlightedCount++;
+      }
+    });
+
+    console.log(`Highlighted ${highlightedCount} elements needing GPU acceleration`);
+    return highlightedCount;
+  }
+
+  /**
+   * 上报渲染性能数据
+   */
+  reportRenderMetrics(): void {
+    const metrics = this.renderMonitor.getMetrics();
+    this.reporter.report({
+      type: 'render',
+      data: metrics,
+    });
+  }
+
+  /**
+   * 停止渲染性能监控
+   */
+  stopRenderMonitoring(): void {
+    this.renderMonitor.stop();
+  }
+
+  /**
+   * 清理渲染性能数据
+   */
+  clearRenderMetrics(): void {
+    this.renderMonitor.clear();
+  }
+
+  /**
    * 销毁 SDK
    */
   destroy(): void {
     this.reporter.destroy();
     this.performanceCollector.destroy();
+    this.renderMonitor.stop();
     this.initialized = false;
   }
 }
@@ -239,7 +360,11 @@ export type {
   ErrorInfo, 
   ReportData,
   LongTaskInfo,
-  LongTaskAttribution
+  LongTaskAttribution,
+  RenderMetrics,
+  ReflowInfo,
+  RepaintInfo,
+  GPUAccelerationInfo
 };
 
 // 默认导出

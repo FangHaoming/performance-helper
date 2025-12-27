@@ -2,8 +2,8 @@
  * SDK 配置选项
  */
 export interface PerformanceHelperOptions {
-  /** 上报地址 */
-  reportUrl: string;
+  /** 上报地址，如果为空则将数据打印到控制台 */
+  reportUrl?: string;
   /** 应用ID */
   appId?: string;
   /** 用户ID */
@@ -130,12 +130,96 @@ export interface ErrorInfo {
  * 上报数据
  */
 export interface ReportData {
-  type: 'performance' | 'resource' | 'error';
-  data: PerformanceMetrics | ResourceInfo | ErrorInfo;
+  type: 'performance' | 'resource' | 'error' | 'render';
+  data: PerformanceMetrics | ResourceInfo | ErrorInfo | RenderMetrics;
   timestamp: number;
   url: string;
   userAgent: string;
   appId?: string;
   userId?: string;
+}
+
+/**
+ * 重排（Reflow）信息
+ */
+export interface ReflowInfo {
+  /** 时间戳（相对于页面加载） */
+  timestamp: number;
+  /** 持续时间（毫秒） */
+  duration: number;
+  /** 相关DOM元素 */
+  element?: Element;
+  /** 元素路径 */
+  elementPath?: string;
+  /** 重排原因 */
+  reason: string;
+  /** 掉帧数（如果是帧率下降导致） */
+  droppedFrames?: number;
+  /** 堆栈跟踪 */
+  stackTrace?: string;
+}
+
+/**
+ * 重绘（Repaint）信息
+ */
+export interface RepaintInfo {
+  /** 时间戳（相对于页面加载） */
+  timestamp: number;
+  /** 持续时间（毫秒） */
+  duration: number;
+  /** 相关DOM元素 */
+  element?: Element;
+  /** 元素路径 */
+  elementPath?: string;
+  /** 重绘原因 */
+  reason: string;
+  /** 堆栈跟踪 */
+  stackTrace?: string;
+}
+
+/**
+ * GPU加速信息
+ */
+export interface GPUAccelerationInfo {
+  /** DOM元素 */
+  element: HTMLElement;
+  /** 元素路径 */
+  elementPath: string;
+  /** 是否启用GPU加速 */
+  isAccelerated: boolean;
+  /** 加速方法列表 */
+  accelerationMethods: string[];
+  /** 是否使用 will-change */
+  willChange: boolean;
+  /** 是否使用 transform */
+  transform: boolean;
+  /** 是否使用 opacity */
+  opacity: boolean;
+  /** 是否使用 filter */
+  filter: boolean;
+  /** 是否使用 backdrop-filter */
+  backdropFilter: boolean;
+}
+
+/**
+ * 渲染性能指标
+ */
+export interface RenderMetrics {
+  /** 重排次数 */
+  reflowCount: number;
+  /** 重绘次数 */
+  repaintCount: number;
+  /** 重排详情列表 */
+  reflows: ReflowInfo[];
+  /** 重绘详情列表 */
+  repaints: RepaintInfo[];
+  /** GPU加速元素数量 */
+  gpuAcceleratedCount: number;
+  /** GPU加速元素详情 */
+  gpuAcceleratedElements: GPUAccelerationInfo[];
+  /** 总重排时间（毫秒） */
+  totalReflowTime: number;
+  /** 总重绘时间（毫秒） */
+  totalRepaintTime: number;
 }
 
